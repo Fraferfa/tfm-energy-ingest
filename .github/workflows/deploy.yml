@@ -117,7 +117,40 @@ jobs:
             --service-account ${{ env.QC_SA }}@${{ env.PROJECT_ID }}.iam.gserviceaccount.com \
             --args="qc,interconn,$Y,$M,--gcs-root,gs://energia-tfm-bucket"
 
+      - name: Smoke test - Verify jobs exist
+        if: github.ref == 'refs/heads/main'
+        run: |
+          echo "Verificando que los jobs se desplegaron correctamente..."
+          FAILED=0
+          
+          for ds in ${{ env.INGEST_DATASETS }}; do
+            JOB_NAME=$(echo "ingest-$ds" | tr '_' '-')
+            if gcloud run jobs describe $JOB_NAME --region ${{ env.REGION }} --project ${{ env.PROJECT_ID }} &>/dev/null; then
+              echo "✓ $JOB_NAME exists"
+            else
+              echo "✗ $JOB_NAME NOT FOUND"
+              FAILED=1
+            fi
+          done
+          
+          for job in compact-monthly compact-clean qc-interconn-latest; do
+            if gcloud run jobs describe $job --region ${{ env.REGION }} --project ${{ env.PROJECT_ID }} &>/dev/null; then
+              echo "✓ $job exists"
+            else
+              echo "✗ $job NOT FOUND"
+              FAILED=1
+            fi
+          done
+          
+          if [ $FAILED -eq 1 ]; then
+            echo "Smoke test FAILED: Some jobs are missing"
+            exit 1
+          fi
+          
+          echo "Smoke test PASSED: All jobs deployed successfully"
+
       - name: Summary
         run: |
           echo "✅ Publicadas: ${{ steps.meta.outputs.sha_tag }} / latest / ${{ steps.meta.outputs.branch_tag }}" >> $GITHUB_STEP_SUMMARY
           echo "✅ Deploy jobs (main) completado" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Smoke test passed" >> $GITHUB_STEP_SUMMARY
