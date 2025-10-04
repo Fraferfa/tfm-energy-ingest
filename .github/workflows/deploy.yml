@@ -3,6 +3,8 @@ name: Build & Deploy Ingestion
 on:
   push:
     branches: [ main ]
+  release:
+    types: [published]
   workflow_dispatch:
 
 env:
@@ -10,7 +12,12 @@ env:
   REGION: europe-southwest1
   REPO: energy
   IMAGE_NAME: tfm-energy-ingest
-  ARTIFACT_HOST: ${{ env.REGION }}-docker.pkg.dev
+  ARTIFACT_HOST: europe-southwest1-docker.pkg.dev
+  INGEST_DATASETS: prices_pvpc prices_spot demand gen_mix interconn
+  INGEST_SA: ingest-base
+  COMPACT_SA: ingest-compact
+  QC_SA: ingest-qc
+  SECRET_ESIOS: ESIOS_TOKEN
 
 jobs:
   build-deploy:
@@ -23,10 +30,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python (optional for tests)
+      - name: Set up Python (optional for lint/tests)
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+
+      - name: Derive tags
+        id: meta
+        run: |
+          BRANCH_SAN="${GITHUB_REF_NAME//\//-}"
+          echo "sha_tag=sha-${GITHUB_SHA}" >> $GITHUB_OUTPUT
+          echo "branch_tag=branch-${BRANCH_SAN}" >> $GITHUB_OUTPUT
 
       - name: Auth to Google Cloud (Workload Identity Federation)
         uses: google-github-actions/auth@v2
@@ -39,34 +53,83 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Docker Auth Artifact Registry
-        run: gcloud auth configure-docker $ARTIFACT_HOST --quiet
+        run: gcloud auth configure-docker ${{ env.ARTIFACT_HOST }} --quiet
 
-      - name: Build image
+      - name: Build image (sha + branch + latest)
         run: |
-          docker build -t $ARTIFACT_HOST/$PROJECT_ID/$REPO/$IMAGE_NAME:sha-${{ github.sha }} -f docker/Dockerfile .
-          docker tag $ARTIFACT_HOST/$PROJECT_ID/$REPO/$IMAGE_NAME:sha-${{ github.sha }} $ARTIFACT_HOST/$PROJECT_ID/$REPO/$IMAGE_NAME:latest
+          docker build -t ${{ env.ARTIFACT_HOST }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.sha_tag }} -f docker/Dockerfile .
+          docker tag  ${{ env.ARTIFACT_HOST }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.sha_tag }} \
+                      ${{ env.ARTIFACT_HOST }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.branch_tag }}
+          docker tag  ${{ env.ARTIFACT_HOST }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.sha_tag }} \
+                      ${{ env.ARTIFACT_HOST }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.IMAGE_NAME }}:latest
 
       - name: Push image
         run: |
-          docker push $ARTIFACT_HOST/$PROJECT_ID/$REPO/$IMAGE_NAME:sha-${{ github.sha }}
-          docker push $ARTIFACT_HOST/$PROJECT_ID/$REPO/$IMAGE_NAME:latest
+          docker push ${{ env.ARTIFACT_HOST }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.sha_tag }}
+          docker push ${{ env.ARTIFACT_HOST }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.branch_tag }}
+          docker push ${{ env.ARTIFACT_HOST }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.IMAGE_NAME }}:latest
 
-      # Opcional: actualizar Jobs (reemplaza si ya existen). Descomentar al tener SAs y Jobs definidos.
-      # - name: Deploy / Update Cloud Run Jobs
-      #   run: |
-      #     gcloud run jobs deploy ingest-prices-pvpc \
-      #       --image=$ARTIFACT_HOST/$PROJECT_ID/$REPO/$IMAGE_NAME:latest \
-      #       --region=$REGION \
-      #       --service-account=ingest-jobs-sa@$PROJECT_ID.iam.gserviceaccount.com \
-      #       --set-secrets=ESIOS_TOKEN=ESIOS_TOKEN:latest \
-      #       --args=ingest,prices_pvpc
-      #     gcloud run jobs deploy compact-monthly \
-      #       --image=$ARTIFACT_HOST/$PROJECT_ID/$REPO/$IMAGE_NAME:latest \
-      #       --region=$REGION \
-      #       --service-account=compact-jobs-sa@$PROJECT_ID.iam.gserviceaccount.com \
-      #       --args=compact,--months-back,3
+      - name: Promote to prod on release
+        if: github.event_name == 'release'
+        run: |
+          docker pull ${{ env.ARTIFACT_HOST }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.sha_tag }}
+          docker tag  ${{ env.ARTIFACT_HOST }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.sha_tag }} \
+                      ${{ env.ARTIFACT_HOST }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.IMAGE_NAME }}:prod
+          docker push ${{ env.ARTIFACT_HOST }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.IMAGE_NAME }}:prod
+
+      - name: Deploy ingest jobs (latest)
+        if: github.ref == 'refs/heads/main'
+        run: |
+          for ds in ${{ env.INGEST_DATASETS }}; do
+            echo "Deploy ingest-$ds"
+            gcloud run jobs deploy ingest-$ds \
+              --image ${{ env.ARTIFACT_HOST }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.IMAGE_NAME }}:latest \
+              --region ${{ env.REGION }} \
+              --service-account ${{ env.INGEST_SA }}@${{ env.PROJECT_ID }}.iam.gserviceaccount.com \
+              --set-secrets ${{ env.SECRET_ESIOS }}=${{ env.SECRET_ESIOS }}:latest \
+              --args ingest \
+              --args $ds
+          done
+
+      - name: Deploy compaction jobs (latest)
+        if: github.ref == 'refs/heads/main'
+        run: |
+          gcloud run jobs deploy compact-monthly \
+            --image ${{ env.ARTIFACT_HOST }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.IMAGE_NAME }}:latest \
+            --region ${{ env.REGION }} \
+            --service-account ${{ env.COMPACT_SA }}@${{ env.PROJECT_ID }}.iam.gserviceaccount.com \
+            --args compact \
+            --args --months-back \
+            --args 3 \
+            --args --force
+          
+          gcloud run jobs deploy compact-clean \
+            --image ${{ env.ARTIFACT_HOST }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.IMAGE_NAME }}:latest \
+            --region ${{ env.REGION }} \
+            --service-account ${{ env.COMPACT_SA }}@${{ env.PROJECT_ID }}.iam.gserviceaccount.com \
+            --args compact \
+            --args --months-back \
+            --args 3 \
+            --args --delete-originals \
+            --args --force
+
+      - name: Deploy QC job (previous month interconn)
+        if: github.ref == 'refs/heads/main'
+        run: |
+          Y=$(date -u +%Y -d "last month")
+          M=$(date -u +%m -d "last month")
+          gcloud run jobs deploy qc-interconn-latest \
+            --image ${{ env.ARTIFACT_HOST }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.IMAGE_NAME }}:latest \
+            --region ${{ env.REGION }} \
+            --service-account ${{ env.QC_SA }}@${{ env.PROJECT_ID }}.iam.gserviceaccount.com \
+            --args qc \
+            --args interconn \
+            --args $Y \
+            --args $M \
+            --args --gcs-root \
+            --args gs://energia-tfm-bucket
 
       - name: Summary
         run: |
-          echo "Imagen publicada: $ARTIFACT_HOST/$PROJECT_ID/$REPO/$IMAGE_NAME:sha-${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "Tag latest actualizado" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Publicadas: ${{ steps.meta.outputs.sha_tag }} / latest / ${{ steps.meta.outputs.branch_tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Deploy jobs (main) completado" >> $GITHUB_STEP_SUMMARY
