@@ -1,0 +1,126 @@
+defaults:
+  base_url: "https://api.esios.ree.es/indicators"
+  tz_output: "UTC"
+  tz_present: "Europe/Madrid"
+  overlap_hours: 6
+  raw_format: "csv"
+  rate_limit_per_sec: 1
+  timeout_seconds: 30
+  retries: 3
+  backoff_seconds: 2
+  # Columnas a conservar en RAW (para reducir tamaño/duplicidad)
+  raw_keep_columns: ["indicator_id", "datetime", "geo_name", "value"]
+
+schedules:
+  hourly:
+    cron: "0 * * * *"
+    window: { type: "last_hours", hours: 6 }
+  pvpc_daily_20h:
+    cron: "20 20 * * *"
+    window: { type: "next_day_dstsafe" }
+  minute_complete_20:
+    cron: "20 * * * *"
+    window: { type: "last_complete_hour_local" }
+
+paths:
+  bucket: "gs://energia-tfm-bucket"
+  raw: "{bucket}/raw/{dataset}/year={year}/month={month}/day={day}/{dataset}_{iso_run}.csv"
+  curated: "{bucket}/curated/{table}/year={year}/month={month}/day={day}/part-{uuid}.parquet"
+
+paths_local:
+  root: "./data"
+  raw: "{root}/raw/{dataset}/year={year}/month={month}/day={day}/{dataset}_{iso_run}.csv"
+  curated: "{root}/curated/{table}/year={year}/month={month}/day={day}/part-{uuid}.parquet"
+
+datasets:
+  prices_pvpc:
+    enabled: true
+    indicator_ids: [1001]
+    granularity: "hour"
+    schedule_ref: "pvpc_daily_20h"
+    window_strategy: { type: "next_day_dstsafe" }
+    normalize:
+      unit: "as_is"
+      kind: "prices"
+      column_map: { ts: "hour_ts", value: "price_eur_mwh", zone: "zone", source: "PVPC" }
+      validators: ["validate_pvpc_complete_day"]
+    dedupe_key: ["hour_ts", "zone", "source"]
+    curated_table: "prices"
+
+  prices_spot:
+    enabled: true
+    indicator_ids: [600]
+    granularity: "hour"
+    schedule_ref: "hourly"
+    window_strategy: { type: "last_hours", hours: 6 }
+    normalize:
+      unit: "as_is"
+      kind: "prices"
+      column_map: { ts: "hour_ts", value: "price_eur_mwh", zone: "zone", source: "SPOT_ES" }
+    dedupe_key: ["hour_ts", "zone", "source"]
+    curated_table: "prices"
+
+  demand:
+    enabled: true
+    indicator_ids: [2037, 2052, 2053]
+    granularity: "minute"
+    schedule_ref: "minute_complete_20"
+    window_strategy: { type: "last_complete_hour_local" }
+    normalize:
+      unit: "mw"
+      kind: "wide_by_indicator"
+      column_map: { ts: "minute_ts", real: "demand_mw", forecast: "forecast_mw", zone: "zone" }
+      id_rename:
+        "2037": "demanda_real_mw"
+        "2052": "demanda_prevista_h_mw"
+        "2053": "demanda_programada_h_mw"
+    dedupe_key: ["minute_ts", "zone"]
+    curated_table: "demand"
+
+  gen_mix:
+    enabled: true
+    indicator_ids: [2038, 2039, 2048, 2040, 2041, 2044, 2045, 2051, 2042, 1152, 1172]
+    granularity: "minute"
+    schedule_ref: "minute_complete_20"
+    window_strategy: { type: "last_complete_hour_local" }
+    normalize:
+      unit: "mw"
+      kind: "long_tech"
+      tech_map:
+        "2039": "nuclear"
+        "2038": "eolica"
+        "2044": "solar_fotovoltaica"
+        "2045": "solar_termica"
+        "2042": "hidraulica"
+        "2041": "ciclo_combinado"
+        "2040": "carbon"
+        "2048": "fuel_gas"
+        "1152": "bombeo_turbinacion"
+        "1172": "bombeo_consumo"
+        "2051": "biocombustible"
+      column_map: { ts: "minute_ts", tech: "tech", value: "mw", zone: "zone" }
+      post_hook: "compute_mix_pct"
+    dedupe_key: ["minute_ts", "zone", "tech"]
+    curated_table: "gen_mix"
+
+  interconn:
+    enabled: true
+    indicator_ids: [2068, 2070, 2069, 2072, 2076, 2075, 2074, 2073]
+    granularity: "minute"
+    schedule_ref: "minute_complete_20"
+    window_strategy: { type: "last_complete_hour_local" }
+    normalize:
+      unit: "mw"
+      kind: "interconn_pairs"
+      to_pairs:
+        "2068": ["FR","export_mw"]
+        "2076": ["FR","import_mw"]
+        "2070": ["PT","export_mw"]
+        "2075": ["PT","import_mw"]
+        "2069": ["MA","export_mw"]
+        "2074": ["MA","import_mw"]
+        "2072": ["AD","export_mw"]
+        "2073": ["AD","import_mw"]
+      column_map: { ts: "minute_ts", country: "country" }
+    dedupe_key: ["minute_ts", "country"]
+    curated_table: "interconn"

@@ -1,0 +1,35 @@
+prices:
+  pvpc: 1001
+  spot_es: 600
+
+demand:
+  real_mw: 2037
+  prevista_mw: 2052
+  scheduled_mw: 2053
+
+generation_real_mw:
+  eolica: 2038
+  nuclear: 2039
+  fuel_gas: 2048
+  carbon: 2040
+  ciclo_combinado: 2041
+  intercambios_int: 2043
+  enlace_balear: 1751
+  solar_fotovoltaica: 2044
+  solar_termica: 2045
+  biocombustible: 2051
+  cogeneracion_residuos: 2051
+  hidraulica: 2042
+  turbina_vapor: 2049
+  bombeo_turbinacion: 1152
+  bombeo_consumo: 1172
+
+interconnections_mw:
+  fr_export: 2068
+  pt_export: 2070
+  ma_export: 2069
+  ad_export: 2072
+  fr_import: 2076
+  pt_import: 2075
+  ma_import: 2074
+  ad_import: 2073

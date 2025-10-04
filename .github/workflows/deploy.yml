@@ -1,0 +1,72 @@
+name: Build & Deploy Ingestion
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: europe-southwest1
+  REPO: energy
+  IMAGE_NAME: tfm-energy-ingest
+  ARTIFACT_HOST: ${{ env.REGION }}-docker.pkg.dev
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write  # necesario para Workload Identity Federation
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python (optional for tests)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Auth to Google Cloud (Workload Identity Federation)
+        uses: google-github-actions/auth@v2
+        with:
+          token_format: access_token
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_ID_PROVIDER }}
+          service_account: ${{ secrets.GCP_CICD_SA }}
+
+      - name: Configure gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Docker Auth Artifact Registry
+        run: gcloud auth configure-docker $ARTIFACT_HOST --quiet
+
+      - name: Build image
+        run: |
+          docker build -t $ARTIFACT_HOST/$PROJECT_ID/$REPO/$IMAGE_NAME:sha-${{ github.sha }} -f docker/Dockerfile .
+          docker tag $ARTIFACT_HOST/$PROJECT_ID/$REPO/$IMAGE_NAME:sha-${{ github.sha }} $ARTIFACT_HOST/$PROJECT_ID/$REPO/$IMAGE_NAME:latest
+
+      - name: Push image
+        run: |
+          docker push $ARTIFACT_HOST/$PROJECT_ID/$REPO/$IMAGE_NAME:sha-${{ github.sha }}
+          docker push $ARTIFACT_HOST/$PROJECT_ID/$REPO/$IMAGE_NAME:latest
+
+      # Opcional: actualizar Jobs (reemplaza si ya existen). Descomentar al tener SAs y Jobs definidos.
+      # - name: Deploy / Update Cloud Run Jobs
+      #   run: |
+      #     gcloud run jobs deploy ingest-prices-pvpc \
+      #       --image=$ARTIFACT_HOST/$PROJECT_ID/$REPO/$IMAGE_NAME:latest \
+      #       --region=$REGION \
+      #       --service-account=ingest-jobs-sa@$PROJECT_ID.iam.gserviceaccount.com \
+      #       --set-secrets=ESIOS_TOKEN=ESIOS_TOKEN:latest \
+      #       --args=ingest,prices_pvpc
+      #     gcloud run jobs deploy compact-monthly \
+      #       --image=$ARTIFACT_HOST/$PROJECT_ID/$REPO/$IMAGE_NAME:latest \
+      #       --region=$REGION \
+      #       --service-account=compact-jobs-sa@$PROJECT_ID.iam.gserviceaccount.com \
+      #       --args=compact,--months-back,3
+
+      - name: Summary
+        run: |
+          echo "Imagen publicada: $ARTIFACT_HOST/$PROJECT_ID/$REPO/$IMAGE_NAME:sha-${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "Tag latest actualizado" >> $GITHUB_STEP_SUMMARY

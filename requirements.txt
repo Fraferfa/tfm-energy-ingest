@@ -1,0 +1,16 @@
+requests
+pandas>=2.0
+pyarrow
+gcsfs
+python-dateutil
+PyYAML
+
+# --- Optional / herramientas ---
+# fsspec explícito para estabilizar versionado (ya viene transitivamente con gcsfs)
+fsspec>=2024.6.0
+# DuckDB para análisis locales / debugging rápido sobre parquet
+duckdb>=1.0.0
+# Linter / formateo rápido
+ruff>=0.5.0
+# Framework de tests
+pytest>=8.0.0

@@ -1,0 +1,32 @@
+__pycache__/
+*.pyc
+.env
+.venv/
+venv/
+dist/
+build/
+.DS_Store
+.cache/
+*.log
+**/.pytest_cache/
+
+# Service account / credentials (NO subir claves privadas)
+*service-account*.json
+*credentials*.json
+tfm-energia-streamlit-cloud-*.json
+secrets/
+
+# Local generated data (raw/curated outputs) – exclude from VCS
+data/
+
+# ficheros 7z
+*.7z
+*.zip
+*.tar.gz
+*.rar
+*.tar
+*.gz
+*.bz2
+*.xz
+*.tgz
+*.Z

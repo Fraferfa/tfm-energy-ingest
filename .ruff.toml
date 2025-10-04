@@ -1,0 +1,10 @@
+# Ruff configuration
+line-length = 120
+select = ["E", "F", "I"]  # Pyflakes & pycodestyle & import sorting
+ignore = []
+exclude = [".venv", "build", "dist"]
+
+[format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
