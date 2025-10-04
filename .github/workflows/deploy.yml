@@ -88,7 +88,8 @@ jobs:
               --region ${{ env.REGION }} \
               --service-account ${{ env.INGEST_SA }}@${{ env.PROJECT_ID }}.iam.gserviceaccount.com \
               --set-secrets ${{ env.SECRET_ESIOS }}=${{ env.SECRET_ESIOS }}:latest \
-              --args ingest --args $ds
+              --args "ingest" \
+              --args "$ds"
           done
 
       - name: Deploy compaction jobs (latest)
@@ -98,13 +99,20 @@ jobs:
             --image ${{ env.ARTIFACT_HOST }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.IMAGE_NAME }}:latest \
             --region ${{ env.REGION }} \
             --service-account ${{ env.COMPACT_SA }}@${{ env.PROJECT_ID }}.iam.gserviceaccount.com \
-            --args compact --args --months-back --args 3 --args --force
+            --args "compact" \
+            --args "--months-back" \
+            --args "3" \
+            --args "--force"
           
           gcloud run jobs deploy compact-clean \
             --image ${{ env.ARTIFACT_HOST }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.IMAGE_NAME }}:latest \
             --region ${{ env.REGION }} \
             --service-account ${{ env.COMPACT_SA }}@${{ env.PROJECT_ID }}.iam.gserviceaccount.com \
-            --args compact --args --months-back --args 3 --args --delete-originals --args --force
+            --args "compact" \
+            --args "--months-back" \
+            --args "3" \
+            --args "--delete-originals" \
+            --args "--force"
 
       - name: Deploy QC job (previous month interconn)
         if: github.ref == 'refs/heads/main'
@@ -115,7 +123,12 @@ jobs:
             --image ${{ env.ARTIFACT_HOST }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.IMAGE_NAME }}:latest \
             --region ${{ env.REGION }} \
             --service-account ${{ env.QC_SA }}@${{ env.PROJECT_ID }}.iam.gserviceaccount.com \
-            --args qc --args interconn --args $Y --args $M --args --gcs-root --args gs://energia-tfm-bucket
+            --args "qc" \
+            --args "interconn" \
+            --args "$Y" \
+            --args "$M" \
+            --args "--gcs-root" \
+            --args "gs://energia-tfm-bucket"
 
       - name: Summary
         run: |
