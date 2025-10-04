@@ -10,9 +10,9 @@ Exports:
     load_cfg, resolve_window, EsiosClient, normalize helpers (limited)
 """
 
-from .main import load_cfg  # re-export
-from .utils import resolve_window, now_utc
 from .esios_client import EsiosClient
+from .main import load_cfg  # re-export
+from .utils import now_utc, resolve_window
 
 __all__ = [
     "load_cfg",

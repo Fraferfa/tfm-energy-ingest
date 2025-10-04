@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import argparse
-from datetime import date, timedelta, datetime, timezone
-import uuid
 import json
+import uuid
+from datetime import date, datetime, timedelta, timezone
 
 import pandas as pd
 import yaml
@@ -12,45 +12,30 @@ import yaml
 try:  # relative (cuando se importa como pipelines.ingest.main)
     from .esios_client import EsiosClient
     from .hooks import compute_mix_pct, validate_pvpc_complete_day
-    from .normalize import (
-        normalize_interconn_pairs,
-        normalize_long_tech,
-        normalize_prices,
-        normalize_wide_by_indicator,
-        parse_values_to_df,
-    )
-    from .utils import (
-        dedupe,
-        now_utc,
-        resolve_window,
-        write_parquet_partitioned,
-        write_raw,
-    )
+    from .normalize import (normalize_interconn_pairs, normalize_long_tech,
+                            normalize_prices, normalize_wide_by_indicator,
+                            parse_values_to_df)
+    from .utils import (dedupe, now_utc, resolve_window,
+                        write_parquet_partitioned, write_raw)
 except (
     ImportError
 ):  # fallback absoluto para ejecución directa: python pipelines/ingest/main.py
     # Insertamos raíz del repo en sys.path si no está para que 'pipelines' sea resoluble
-    import sys, os
+    import os
+    import sys
 
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
     if repo_root not in sys.path:
         sys.path.insert(0, repo_root)
     from pipelines.ingest.esios_client import EsiosClient  # type: ignore
-    from pipelines.ingest.hooks import compute_mix_pct, validate_pvpc_complete_day  # type: ignore
+    from pipelines.ingest.hooks import compute_mix_pct  # type: ignore
+    from pipelines.ingest.hooks import validate_pvpc_complete_day
     from pipelines.ingest.normalize import (  # type: ignore
-        normalize_interconn_pairs,
-        normalize_long_tech,
-        normalize_prices,
-        normalize_wide_by_indicator,
-        parse_values_to_df,
-    )
-    from pipelines.ingest.utils import (  # type: ignore
-        dedupe,
-        now_utc,
-        resolve_window,
-        write_parquet_partitioned,
-        write_raw,
-    )
+        normalize_interconn_pairs, normalize_long_tech, normalize_prices,
+        normalize_wide_by_indicator, parse_values_to_df)
+    from pipelines.ingest.utils import (dedupe, now_utc,  # type: ignore
+                                        resolve_window,
+                                        write_parquet_partitioned, write_raw)
 
 HOOKS = {
     "compute_mix_pct": compute_mix_pct,
