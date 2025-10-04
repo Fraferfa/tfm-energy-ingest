@@ -81,8 +81,9 @@ jobs:
         if: github.ref == 'refs/heads/main'
         run: |
           for ds in ${{ env.INGEST_DATASETS }}; do
-            echo "Deploy ingest-$ds"
-            gcloud run jobs deploy ingest-$ds \
+            JOB_NAME=$(echo "ingest-$ds" | tr '_' '-')
+            echo "Deploy $JOB_NAME (dataset: $ds)"
+            gcloud run jobs deploy $JOB_NAME \
               --image ${{ env.ARTIFACT_HOST }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.IMAGE_NAME }}:latest \
               --region ${{ env.REGION }} \
               --service-account ${{ env.INGEST_SA }}@${{ env.PROJECT_ID }}.iam.gserviceaccount.com \
