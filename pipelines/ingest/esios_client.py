@@ -6,7 +6,12 @@ import requests
 
 
 class EsiosClient:
-    def __init__(self, api_key: str | None = None, rate_limit_per_sec: float = 1.0, timeout_seconds: int = 30):
+    def __init__(
+        self,
+        api_key: str | None = None,
+        rate_limit_per_sec: float = 1.0,
+        timeout_seconds: int = 30,
+    ):
         self.api_key = (api_key or os.environ.get("ESIOS_TOKEN", "")).strip()
         if not self.api_key:
             raise RuntimeError("ESIOS_TOKEN no configurado")
@@ -20,7 +25,12 @@ class EsiosClient:
             time.sleep(self.rate_interval - elapsed)
 
     def get_indicator(
-        self, indicator_id: int, start_iso_utc: str, end_iso_utc: str, base_url: str, time_trunc: str | None = "hour"
+        self,
+        indicator_id: int,
+        start_iso_utc: str,
+        end_iso_utc: str,
+        base_url: str,
+        time_trunc: str | None = "hour",
     ) -> Dict[str, Any]:
         self._throttle()
         params = {
@@ -55,7 +65,9 @@ class EsiosClient:
             if mode in ("authorization", "both"):
                 headers["Authorization"] = f"Token token={self.api_key}"
 
-            resp = requests.get(url, headers=headers, params=params, timeout=self.timeout)
+            resp = requests.get(
+                url, headers=headers, params=params, timeout=self.timeout
+            )
             self._last_call = time.time()
 
             if resp.ok:

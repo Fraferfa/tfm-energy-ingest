@@ -21,12 +21,18 @@ def validate_pvpc_complete_day(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         warnings.warn("PVPC vacío")
         return df
-    pvt = df.pivot_table(index="hour_ts", columns="zone", values="price_eur_mwh", aggfunc="last")
+    pvt = df.pivot_table(
+        index="hour_ts", columns="zone", values="price_eur_mwh", aggfunc="last"
+    )
     # Validación de horas: 24 salvo días de cambio DST (23/25)
     if len(pvt.index) not in (23, 24, 25):
-        warnings.warn(f"PVPC horas atípicas: {len(pvt.index)} (esperado 24, tolerado 23/25 en DST)")
+        warnings.warn(
+            f"PVPC horas atípicas: {len(pvt.index)} (esperado 24, tolerado 23/25 en DST)"
+        )
     # Validación de zonas: si solo trabajamos con 'Península', no avisar por otras zonas faltantes
-    expected = set(["Península"]) if set(pvt.columns) == set(["Península"]) else set(ZONES)
+    expected = (
+        set(["Península"]) if set(pvt.columns) == set(["Península"]) else set(ZONES)
+    )
     missing = [z for z in expected if z not in pvt.columns]
     if missing and expected != set(["Península"]):
         warnings.warn(f"Zonas PVPC faltantes: {missing}")

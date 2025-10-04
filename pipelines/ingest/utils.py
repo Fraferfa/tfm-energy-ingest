@@ -28,12 +28,20 @@ def resolve_window(strategy: dict, target_date: date | None = None):
         return start, end, td
     if strategy["type"] == "next_day_dstsafe":
         tomorrow = td + timedelta(days=1)
-        start = datetime.combine(tomorrow, time(0, 0), tzinfo=timezone.utc) - timedelta(hours=3)
-        end = datetime.combine(tomorrow + timedelta(days=1), time(0, 0), tzinfo=timezone.utc) + timedelta(hours=1)
+        start = datetime.combine(tomorrow, time(0, 0), tzinfo=timezone.utc) - timedelta(
+            hours=3
+        )
+        end = datetime.combine(
+            tomorrow + timedelta(days=1), time(0, 0), tzinfo=timezone.utc
+        ) + timedelta(hours=1)
         return start, end, tomorrow
     if strategy["type"] == "today_dstsafe":
-        start = datetime.combine(td, time(0, 0), tzinfo=timezone.utc) - timedelta(hours=3)
-        end = datetime.combine(td + timedelta(days=1), time(0, 0), tzinfo=timezone.utc) + timedelta(hours=1)
+        start = datetime.combine(td, time(0, 0), tzinfo=timezone.utc) - timedelta(
+            hours=3
+        )
+        end = datetime.combine(
+            td + timedelta(days=1), time(0, 0), tzinfo=timezone.utc
+        ) + timedelta(hours=1)
         return start, end, td
     if strategy["type"] == "last_complete_hour_local":
         # Última hora completa en horario de Madrid (CET/CEST), devuelta en UTC
@@ -53,7 +61,12 @@ def _ensure_local_dir(path: str):
 
 
 def write_raw(
-    df: pd.DataFrame, path_tpl: str, dataset: str, run_ts: datetime, bucket_root: dict, io_mode: str = "gcs"
+    df: pd.DataFrame,
+    path_tpl: str,
+    dataset: str,
+    run_ts: datetime,
+    bucket_root: dict,
+    io_mode: str = "gcs",
 ) -> str:
     if df is None:
         return ""
@@ -62,12 +75,22 @@ def write_raw(
     day = f"{run_ts.astimezone(TZ_MADRID).day:02d}"
     iso_run = run_ts.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
     iso_run_safe = iso_run.replace(":", "-") if io_mode == "local" else iso_run
-    path = path_tpl.format(dataset=dataset, year=year, month=month, day=day, iso_run=iso_run_safe, **bucket_root)
+    path = path_tpl.format(
+        dataset=dataset,
+        year=year,
+        month=month,
+        day=day,
+        iso_run=iso_run_safe,
+        **bucket_root,
+    )
     if io_mode == "local":
         _ensure_local_dir(path)
         df.to_csv(path, index=False, encoding="utf-8")
         return path
-    print("GOOGLE_APPLICATION_CREDENTIALS:", os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"))
+    print(
+        "GOOGLE_APPLICATION_CREDENTIALS:",
+        os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"),
+    )
     print("GCLOUD_PROJECT:", os.environ.get("GCLOUD_PROJECT"))
     print("DATA_BUCKET:", os.environ.get("DATA_BUCKET"))
     # Escribimos usando fsspec directamente sobre la ruta gs://
@@ -76,14 +99,26 @@ def write_raw(
 
 
 def write_parquet_partitioned(
-    df: pd.DataFrame, path_tpl: str, table: str, target_date: date, bucket_root: dict, io_mode: str = "gcs"
+    df: pd.DataFrame,
+    path_tpl: str,
+    table: str,
+    target_date: date,
+    bucket_root: dict,
+    io_mode: str = "gcs",
 ) -> str:
     if df is None or df.empty:
         return ""
     year = target_date.year
     month = f"{target_date.month:02d}"
     day = f"{target_date.day:02d}"
-    p = path_tpl.format(table=table, year=year, month=month, day=day, uuid=str(uuid.uuid4()), **bucket_root)
+    p = path_tpl.format(
+        table=table,
+        year=year,
+        month=month,
+        day=day,
+        uuid=str(uuid.uuid4()),
+        **bucket_root,
+    )
     if io_mode == "local":
         _ensure_local_dir(p)
         df.to_parquet(p, index=False)

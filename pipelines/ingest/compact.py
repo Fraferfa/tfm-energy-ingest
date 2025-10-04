@@ -39,7 +39,9 @@ def is_current_year_month(year: int, month: int) -> bool:
     return now.year == year and now.month == month
 
 
-def list_month_paths(root: str, table: str, local: bool = False) -> list[tuple[int, int, str]]:
+def list_month_paths(
+    root: str, table: str, local: bool = False
+) -> list[tuple[int, int, str]]:
     """Return list of (year, month, normalized_month_path) under a curated table root.
 
     We reconstruct paths instead of trusting fs.listdir return values because some
@@ -52,7 +54,7 @@ def list_month_paths(root: str, table: str, local: bool = False) -> list[tuple[i
     results: list[tuple[int, int, str]] = []
 
     # Ensure root has no trailing slash
-    root_clean = root.rstrip('/')
+    root_clean = root.rstrip("/")
 
     try:
         year_entries = fs.listdir(root_clean)  # type: ignore
@@ -75,7 +77,11 @@ def list_month_paths(root: str, table: str, local: bool = False) -> list[tuple[i
         except Exception:
             continue
         for month_entry in month_entries:
-            m_name = month_entry.get("name") if isinstance(month_entry, dict) else month_entry
+            m_name = (
+                month_entry.get("name")
+                if isinstance(month_entry, dict)
+                else month_entry
+            )
             if not isinstance(m_name, str):
                 continue
             mm = re.search(r"month=(\d{2})$", m_name)
@@ -153,7 +159,16 @@ def read_month_dataset(month_path: str):
             micro_files += 1
             tables.append(t)
         except Exception as e:  # pragma: no cover
-            print(json.dumps({"level": "error", "msg": "Error leyendo fragmento", "path": path, "error": str(e)}))
+            print(
+                json.dumps(
+                    {
+                        "level": "error",
+                        "msg": "Error leyendo fragmento",
+                        "path": path,
+                        "error": str(e),
+                    }
+                )
+            )
     if not tables:
         if pa is None:
             raise SystemExit("pyarrow no disponible para tabla vacía")
@@ -171,7 +186,11 @@ def read_month_dataset(month_path: str):
 
 
 def write_compacted(
-    table, month_path: str, compression: str = "zstd", row_group_size: int = 50_000, force: bool = False
+    table,
+    month_path: str,
+    compression: str = "zstd",
+    row_group_size: int = 50_000,
+    force: bool = False,
 ):
     if pq is None:
         raise SystemExit("pyarrow.parquet no disponible. Instala pyarrow.")
@@ -181,7 +200,9 @@ def write_compacted(
     fs = fsspec.get_fs_token_paths(out_path)[0]
     if fs.exists(out_path) and not force:  # type: ignore
         raise SystemExit(f"Ya existe {out_path}. Usa --force para sobrescribir.")
-    pq.write_table(table, out_path, compression=compression, row_group_size=row_group_size)
+    pq.write_table(
+        table, out_path, compression=compression, row_group_size=row_group_size
+    )
     return out_path
 
 
@@ -227,7 +248,10 @@ def delete_micro_files(month_path: str):
                     day_dirs_removed += 1
             except Exception:  # pragma: no cover - best effort
                 pass
-    return {"micro_files_deleted": micro_files_deleted, "day_dirs_removed": day_dirs_removed}
+    return {
+        "micro_files_deleted": micro_files_deleted,
+        "day_dirs_removed": day_dirs_removed,
+    }
 
 
 def log(level: str, **fields):
@@ -237,9 +261,13 @@ def log(level: str, **fields):
 
 
 def main():  # noqa: C901
-    parser = argparse.ArgumentParser(description="Compaction de particiones mensuales curated")
+    parser = argparse.ArgumentParser(
+        description="Compaction de particiones mensuales curated"
+    )
     parser.add_argument(
-        "tables", nargs="*", help="Tablas curated a compactar (p.ej. prices demand gen_mix). Vacío = todas."
+        "tables",
+        nargs="*",
+        help="Tablas curated a compactar (p.ej. prices demand gen_mix). Vacío = todas.",
     )
     parser.add_argument(
         "--dataset",
@@ -247,13 +275,32 @@ def main():  # noqa: C901
         action="append",
         help="Alias de tablas curated (se puede repetir). Útil para usar --dataset interconn en vez de posicionals.",
     )
-    parser.add_argument("--include-current", action="store_true", help="Incluir mes en curso")
-    parser.add_argument("--months-back", type=int, help="Solo procesar los últimos N meses cerrados (después de filtros)")
-    parser.add_argument("--month", help="Procesar únicamente el mes YYYY-MM indicado (después se puede combinar con --dataset)")
-    parser.add_argument("--force", action="store_true", help="Sobrescribir compact.parquet existente")
-    parser.add_argument("--delete-originals", action="store_true", help="Borrar micro-files tras compactar")
+    parser.add_argument(
+        "--include-current", action="store_true", help="Incluir mes en curso"
+    )
+    parser.add_argument(
+        "--months-back",
+        type=int,
+        help="Solo procesar los últimos N meses cerrados (después de filtros)",
+    )
+    parser.add_argument(
+        "--month",
+        help="Procesar únicamente el mes YYYY-MM indicado (después se puede combinar con --dataset)",
+    )
+    parser.add_argument(
+        "--force", action="store_true", help="Sobrescribir compact.parquet existente"
+    )
+    parser.add_argument(
+        "--delete-originals",
+        action="store_true",
+        help="Borrar micro-files tras compactar",
+    )
     parser.add_argument("--local", action="store_true", help="Usar paths_local.curated")
-    parser.add_argument("--dry-run", action="store_true", help="No escribe ni borra, solo muestra acciones")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="No escribe ni borra, solo muestra acciones",
+    )
     args = parser.parse_args()
 
     cfg = load_cfg()
@@ -282,14 +329,21 @@ def main():  # noqa: C901
 
     run_id = str(uuid.uuid4())
     t_start = datetime.now(timezone.utc)
-    global_stats = {"months": 0, "rows_final_total": 0, "rows_files_sum_total": 0, "dedup_removed_total": 0}
+    global_stats = {
+        "months": 0,
+        "rows_final_total": 0,
+        "rows_files_sum_total": 0,
+        "dedup_removed_total": 0,
+    }
     log("info", action="tables_selected", run_id=run_id, tables=target_tables)
     for table in target_tables:
         table_root = f"{curated_root}/{table}"
         try:
             month_paths = list_month_paths(table_root, table, local=args.local)
         except Exception as e:
-            log("warn", action="list_failed", table=table, root=table_root, error=str(e))
+            log(
+                "warn", action="list_failed", table=table, root=table_root, error=str(e)
+            )
             continue
         closed = detect_closed_months(month_paths, include_current=args.include_current)
         # Filtro por --month específico
@@ -307,14 +361,35 @@ def main():  # noqa: C901
             log("info", action="no_closed_months", table=table)
             continue
         for y, m, path in closed:
-            log("info", action="processing_month", run_id=run_id, table=table, year=y, month=m, path=path)
+            log(
+                "info",
+                action="processing_month",
+                run_id=run_id,
+                table=table,
+                year=y,
+                month=m,
+                path=path,
+            )
             try:
                 table_pa, raw_row_count, micro_file_count = read_month_dataset(path)
             except Exception as e:
-                log("error", action="read_failed", run_id=run_id, path=path, error=str(e))
+                log(
+                    "error",
+                    action="read_failed",
+                    run_id=run_id,
+                    path=path,
+                    error=str(e),
+                )
                 continue
             if table_pa.num_rows == 0:
-                log("info", action="empty_month", run_id=run_id, table=table, year=y, month=m)
+                log(
+                    "info",
+                    action="empty_month",
+                    run_id=run_id,
+                    table=table,
+                    year=y,
+                    month=m,
+                )
                 continue
             log(
                 "info",
@@ -339,38 +414,79 @@ def main():  # noqa: C901
                 pdf = pdf.drop_duplicates(subset=dedupe_keys, keep="last")
                 removed = before - len(pdf)
                 if removed:
-                    log("info", action="dedupe", run_id=run_id, removed=removed, keys=dedupe_keys)
+                    log(
+                        "info",
+                        action="dedupe",
+                        run_id=run_id,
+                        removed=removed,
+                        keys=dedupe_keys,
+                    )
                     # Heurística: si usamos sólo timestamp y existen columnas de dimensión, alertar posible colapso accidental
-                    if len(dedupe_keys) == 1 and any(c in pdf.columns for c in ["tech", "country", "source"]):
+                    if len(dedupe_keys) == 1 and any(
+                        c in pdf.columns for c in ["tech", "country", "source"]
+                    ):
                         log(
                             "warn",
                             action="possible_dimension_collapse",
                             run_id=run_id,
                             key_used=dedupe_keys,
-                            dims_present=[c for c in ["tech", "country", "source"] if c in pdf.columns],
+                            dims_present=[
+                                c
+                                for c in ["tech", "country", "source"]
+                                if c in pdf.columns
+                            ],
                             suggestion="Revisar pick_dedupe_keys: quizá faltan columnas de dimensión",
                         )
                 if pa is None:
-                    raise SystemExit("pyarrow no disponible para reconstruir tabla tras dedupe")
+                    raise SystemExit(
+                        "pyarrow no disponible para reconstruir tabla tras dedupe"
+                    )
                 table_pa = pa.Table.from_pandas(pdf, preserve_index=False)
             # Validación: filas concat (antes dedupe) == suma micro-files
             if table_pa.num_rows > raw_row_count:
-                log("warn", action="row_mismatch_excess", run_id=run_id, table=table, expected=raw_row_count, actual=table_pa.num_rows)
+                log(
+                    "warn",
+                    action="row_mismatch_excess",
+                    run_id=run_id,
+                    table=table,
+                    expected=raw_row_count,
+                    actual=table_pa.num_rows,
+                )
             # Estadísticas finales
-            log("info", action="post_stats", run_id=run_id, table=table, year=y, month=m, rows_final=table_pa.num_rows)
+            log(
+                "info",
+                action="post_stats",
+                run_id=run_id,
+                table=table,
+                year=y,
+                month=m,
+                rows_final=table_pa.num_rows,
+            )
             global_stats["months"] += 1
             global_stats["rows_final_total"] += table_pa.num_rows
             global_stats["rows_files_sum_total"] += raw_row_count
             # dedup_removed sum captured via individual logs; approximate by diff
             if raw_row_count >= table_pa.num_rows:
-                global_stats["dedup_removed_total"] += (raw_row_count - table_pa.num_rows)
+                global_stats["dedup_removed_total"] += raw_row_count - table_pa.num_rows
             out_path = path.rstrip("/") + "/compact.parquet"
             if args.dry_run:
-                log("info", action="dry_write", run_id=run_id, path=out_path, rows=table_pa.num_rows)
+                log(
+                    "info",
+                    action="dry_write",
+                    run_id=run_id,
+                    path=out_path,
+                    rows=table_pa.num_rows,
+                )
             else:
                 try:
                     written = write_compacted(table_pa, path, force=args.force)
-                    log("info", action="write_ok", run_id=run_id, path=written, rows=table_pa.num_rows)
+                    log(
+                        "info",
+                        action="write_ok",
+                        run_id=run_id,
+                        path=written,
+                        rows=table_pa.num_rows,
+                    )
                 except SystemExit as se:  # e.g. file exists
                     log("info", action="write_skip", run_id=run_id, reason=str(se))
                     continue
@@ -386,7 +502,13 @@ def main():  # noqa: C901
                         day_dirs_removed=del_stats.get("day_dirs_removed"),
                     )
                 except Exception as e:
-                    log("warn", action="micro_delete_failed", run_id=run_id, path=path, error=str(e))
+                    log(
+                        "warn",
+                        action="micro_delete_failed",
+                        run_id=run_id,
+                        path=path,
+                        error=str(e),
+                    )
 
     t_end = datetime.now(timezone.utc)
     duration_s = (t_end - t_start).total_seconds()

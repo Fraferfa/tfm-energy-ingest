@@ -19,10 +19,19 @@ try:  # relative (cuando se importa como pipelines.ingest.main)
         normalize_wide_by_indicator,
         parse_values_to_df,
     )
-    from .utils import dedupe, now_utc, resolve_window, write_parquet_partitioned, write_raw
-except ImportError:  # fallback absoluto para ejecución directa: python pipelines/ingest/main.py
+    from .utils import (
+        dedupe,
+        now_utc,
+        resolve_window,
+        write_parquet_partitioned,
+        write_raw,
+    )
+except (
+    ImportError
+):  # fallback absoluto para ejecución directa: python pipelines/ingest/main.py
     # Insertamos raíz del repo en sys.path si no está para que 'pipelines' sea resoluble
     import sys, os
+
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
     if repo_root not in sys.path:
         sys.path.insert(0, repo_root)
@@ -43,7 +52,10 @@ except ImportError:  # fallback absoluto para ejecución directa: python pipelin
         write_raw,
     )
 
-HOOKS = {"compute_mix_pct": compute_mix_pct, "validate_pvpc_complete_day": validate_pvpc_complete_day}
+HOOKS = {
+    "compute_mix_pct": compute_mix_pct,
+    "validate_pvpc_complete_day": validate_pvpc_complete_day,
+}
 
 
 def load_cfg(path="config/ingest.yaml"):
@@ -52,14 +64,22 @@ def load_cfg(path="config/ingest.yaml"):
 
 
 def fetch_dataset(
-    client: EsiosClient, base_url: str, indicator_ids, start_iso, end_iso, cfg_defaults, time_trunc: str | None = "hour"
+    client: EsiosClient,
+    base_url: str,
+    indicator_ids,
+    start_iso,
+    end_iso,
+    cfg_defaults,
+    time_trunc: str | None = "hour",
 ):
     dfs_by_id = {}
     for ind in indicator_ids:
         last_err = None
         for _ in range(int(cfg_defaults.get("retries", 3))):
             try:
-                payload = client.get_indicator(ind, start_iso, end_iso, base_url, time_trunc=time_trunc)
+                payload = client.get_indicator(
+                    ind, start_iso, end_iso, base_url, time_trunc=time_trunc
+                )
                 df = parse_values_to_df(payload)
                 if not df.empty:
                     df["indicator_id"] = ind
@@ -84,11 +104,17 @@ def normalize_dataset(kind: str, dfs_by_id, ds_cfg):
             frames.append(normalize_prices(df, ncfg.get("column_map", {}), source))
         return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
     if kind == "wide_by_indicator":
-        return normalize_wide_by_indicator(dfs_by_id, ncfg.get("column_map", {}), ncfg.get("id_rename"))
+        return normalize_wide_by_indicator(
+            dfs_by_id, ncfg.get("column_map", {}), ncfg.get("id_rename")
+        )
     if kind == "long_tech":
-        return normalize_long_tech(dfs_by_id, ncfg.get("tech_map", {}), ncfg.get("column_map", {}))
+        return normalize_long_tech(
+            dfs_by_id, ncfg.get("tech_map", {}), ncfg.get("column_map", {})
+        )
     if kind == "interconn_pairs":
-        return normalize_interconn_pairs(dfs_by_id, ncfg.get("to_pairs", {}), ncfg.get("column_map", {}))
+        return normalize_interconn_pairs(
+            dfs_by_id, ncfg.get("to_pairs", {}), ncfg.get("column_map", {})
+        )
     raise ValueError(f"kind no soportado: {kind}")
 
 
@@ -122,24 +148,50 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("dataset", help="Nombre del dataset en config/ingest.yaml")
     parser.add_argument("--target-date", help="YYYY-MM-DD (solo para *_dstsafe)")
-    parser.add_argument("--local", action="store_true", help="Usa modo local: escribe en disco según paths_local")
     parser.add_argument(
-        "--backfill-day", help="YYYY-MM-DD para forzar ingesta del día completo especificado (modo today_dstsafe)"
+        "--local",
+        action="store_true",
+        help="Usa modo local: escribe en disco según paths_local",
     )
     parser.add_argument(
-        "--backfill-range", help="Rango START:END (YYYY-MM-DD:YYYY-MM-DD) para backfill por días completos (inclusive)"
+        "--backfill-day",
+        help="YYYY-MM-DD para forzar ingesta del día completo especificado (modo today_dstsafe)",
+    )
+    parser.add_argument(
+        "--backfill-range",
+        help="Rango START:END (YYYY-MM-DD:YYYY-MM-DD) para backfill por días completos (inclusive)",
     )
     args = parser.parse_args()
 
     cfg = load_cfg()
     ds = cfg["datasets"].get(args.dataset)
     if not ds or not ds.get("enabled", True):
-        available = ", ".join(sorted([k for k, v in cfg.get("datasets", {}).items() if v.get("enabled", True)]))
-        raise SystemExit(f"Dataset '{args.dataset}' no existe o está deshabilitado. Disponibles: {available}")
+        available = ", ".join(
+            sorted(
+                [
+                    k
+                    for k, v in cfg.get("datasets", {}).items()
+                    if v.get("enabled", True)
+                ]
+            )
+        )
+        raise SystemExit(
+            f"Dataset '{args.dataset}' no existe o está deshabilitado. Disponibles: {available}"
+        )
 
     run_id = str(uuid.uuid4())
     t_global_start = datetime.now(timezone.utc)
-    _log("info", run_id, action="run_start", dataset=args.dataset, mode=("range" if args.backfill_range else ("backfill_day" if args.backfill_day else "normal")))
+    _log(
+        "info",
+        run_id,
+        action="run_start",
+        dataset=args.dataset,
+        mode=(
+            "range"
+            if args.backfill_range
+            else ("backfill_day" if args.backfill_day else "normal")
+        ),
+    )
 
     # Modo backfill por rango: iterar días completos
     if args.backfill_range:
@@ -148,7 +200,9 @@ if __name__ == "__main__":
             start_d = date.fromisoformat(start_s)
             end_d = date.fromisoformat(end_s)
         except Exception:
-            raise SystemExit("--backfill-range debe tener formato START:END con YYYY-MM-DD:YYYY-MM-DD")
+            raise SystemExit(
+                "--backfill-range debe tener formato START:END con YYYY-MM-DD:YYYY-MM-DD"
+            )
 
         if end_d < start_d:
             raise SystemExit("--backfill-range END debe ser >= START")
@@ -162,7 +216,9 @@ if __name__ == "__main__":
         raw_tpl = cfg.get("paths_local", {}).get("raw") if args.local else None
         curated_tpl = cfg.get("paths_local", {}).get("curated") if args.local else None
         if args.local and (not raw_tpl or not curated_tpl):
-            raise SystemExit("paths_local.raw/curated no definido en config/ingest.yaml")
+            raise SystemExit(
+                "paths_local.raw/curated no definido en config/ingest.yaml"
+            )
         if args.local:
             assert isinstance(raw_tpl, str) and isinstance(curated_tpl, str)
 
@@ -172,7 +228,9 @@ if __name__ == "__main__":
         current = start_d
         while current <= end_d:
             t_start = datetime.now(timezone.utc)
-            start_dt, end_dt, target_day = resolve_window({"type": "today_dstsafe"}, target_date=current)
+            start_dt, end_dt, target_day = resolve_window(
+                {"type": "today_dstsafe"}, target_date=current
+            )
             start_iso = start_dt.isoformat().replace("+00:00", "Z")
             end_iso = end_dt.isoformat().replace("+00:00", "Z")
 
@@ -187,7 +245,11 @@ if __name__ == "__main__":
                 cfg["defaults"],
                 time_trunc=time_trunc,
             )
-            raw_df = pd.concat([v for v in dfs_by_id.values()], ignore_index=True) if dfs_by_id else pd.DataFrame()
+            raw_df = (
+                pd.concat([v for v in dfs_by_id.values()], ignore_index=True)
+                if dfs_by_id
+                else pd.DataFrame()
+            )
             keep_cols = cfg.get("defaults", {}).get("raw_keep_columns")
             if keep_cols and not raw_df.empty:
                 cols = [c for c in keep_cols if c in raw_df.columns]
@@ -212,7 +274,15 @@ if __name__ == "__main__":
                     bucket_root={"bucket": cfg["paths"]["bucket"]},
                 )
             raw_rows = len(raw_df)
-            _log("info", run_id, action="raw_written", dataset=args.dataset, date=str(target_day), rows=raw_rows, path=raw_path)
+            _log(
+                "info",
+                run_id,
+                action="raw_written",
+                dataset=args.dataset,
+                date=str(target_day),
+                rows=raw_rows,
+                path=raw_path,
+            )
 
             kind = ds.get("normalize", {}).get("kind")
             curated_df = normalize_dataset(kind, dfs_by_id, ds)
@@ -229,25 +299,44 @@ if __name__ == "__main__":
                     | (curated_df["minute_ts"].dt.date == target_day)
                 ]
             if args.dataset in ["prices_pvpc", "prices_pvpc_tomorrow", "prices_spot"]:
-                if "hour_ts" not in curated_df.columns and "datetime" in curated_df.columns:
-                    curated_df["hour_ts"] = pd.to_datetime(curated_df["datetime"], utc=True, errors="coerce").dt.floor(
-                        "h"
-                    )
-                if "zone" not in curated_df.columns and "geo_name" in curated_df.columns:
+                if (
+                    "hour_ts" not in curated_df.columns
+                    and "datetime" in curated_df.columns
+                ):
+                    curated_df["hour_ts"] = pd.to_datetime(
+                        curated_df["datetime"], utc=True, errors="coerce"
+                    ).dt.floor("h")
+                if (
+                    "zone" not in curated_df.columns
+                    and "geo_name" in curated_df.columns
+                ):
                     curated_df["zone"] = curated_df["geo_name"]
                 for col in curated_df.columns:
-                    if col not in ["hour_ts", "price_eur_mwh", "zone", "source", "indicator_id"]:
+                    if col not in [
+                        "hour_ts",
+                        "price_eur_mwh",
+                        "zone",
+                        "source",
+                        "indicator_id",
+                    ]:
                         if col.upper() in ["PVPC", "SPOT_ES"]:
                             curated_df.drop(columns=[col], inplace=True)
                 if "indicator_id" not in curated_df.columns:
-                    curated_df["indicator_id"] = ds["indicator_ids"][0] if "indicator_ids" in ds else "unknown"
+                    curated_df["indicator_id"] = (
+                        ds["indicator_ids"][0] if "indicator_ids" in ds else "unknown"
+                    )
             curated_df = dedupe(curated_df, ds.get("dedupe_key", []))
             curated_df = apply_validators(ds, curated_df)
 
             if args.local:
                 assert isinstance(curated_tpl, str)
                 curated_path = write_parquet_partitioned(
-                    curated_df, curated_tpl, ds["curated_table"], target_day, {"root": local_root}, io_mode="local"
+                    curated_df,
+                    curated_tpl,
+                    ds["curated_table"],
+                    target_day,
+                    {"root": local_root},
+                    io_mode="local",
                 )
             else:
                 curated_path = write_parquet_partitioned(
@@ -258,11 +347,30 @@ if __name__ == "__main__":
                     {"bucket": cfg["paths"]["bucket"]},
                 )
             cur_rows = len(curated_df)
-            _log("info", run_id, action="curated_written", dataset=args.dataset, date=str(target_day), rows=cur_rows, path=curated_path)
+            _log(
+                "info",
+                run_id,
+                action="curated_written",
+                dataset=args.dataset,
+                date=str(target_day),
+                rows=cur_rows,
+                path=curated_path,
+            )
             agg_days += 1
             agg_raw_rows += raw_rows
             agg_cur_rows += cur_rows
-            _log("info", run_id, action="day_summary", dataset=args.dataset, date=str(target_day), raw_rows=raw_rows, curated_rows=cur_rows, seconds=round((datetime.now(timezone.utc)-t_start).total_seconds(),2))
+            _log(
+                "info",
+                run_id,
+                action="day_summary",
+                dataset=args.dataset,
+                date=str(target_day),
+                raw_rows=raw_rows,
+                curated_rows=cur_rows,
+                seconds=round(
+                    (datetime.now(timezone.utc) - t_start).total_seconds(), 2
+                ),
+            )
 
             current = current + timedelta(days=1)
         _log(
@@ -273,18 +381,23 @@ if __name__ == "__main__":
             days=agg_days,
             raw_rows=agg_raw_rows,
             curated_rows=agg_cur_rows,
-            duration_seconds=round((datetime.now(timezone.utc) - t_global_start).total_seconds(), 2),
+            duration_seconds=round(
+                (datetime.now(timezone.utc) - t_global_start).total_seconds(), 2
+            ),
         )
         raise SystemExit(0)
 
     # Ventana normal (o --backfill-day)
     backfill_td = date.fromisoformat(args.backfill_day) if args.backfill_day else None
     if backfill_td is not None:
-        start_dt, end_dt, target_day = resolve_window({"type": "today_dstsafe"}, target_date=backfill_td)
+        start_dt, end_dt, target_day = resolve_window(
+            {"type": "today_dstsafe"}, target_date=backfill_td
+        )
     else:
         td = date.fromisoformat(args.target_date) if args.target_date else None
         start_dt, end_dt, target_day = resolve_window(
-            ds.get("window_strategy", {"type": "last_hours", "hours": 6}), target_date=td
+            ds.get("window_strategy", {"type": "last_hours", "hours": 6}),
+            target_date=td,
         )
     start_iso = start_dt.isoformat().replace("+00:00", "Z")
     end_iso = end_dt.isoformat().replace("+00:00", "Z")
@@ -305,7 +418,11 @@ if __name__ == "__main__":
         time_trunc=time_trunc,
     )
 
-    raw_df = pd.concat([v for v in dfs_by_id.values()], ignore_index=True) if dfs_by_id else pd.DataFrame()
+    raw_df = (
+        pd.concat([v for v in dfs_by_id.values()], ignore_index=True)
+        if dfs_by_id
+        else pd.DataFrame()
+    )
     # Aplica trimming de columnas RAW si está configurado (para evitar duplicados de timestamps)
     keep_cols = cfg.get("defaults", {}).get("raw_keep_columns")
     if keep_cols and not raw_df.empty:
@@ -317,10 +434,17 @@ if __name__ == "__main__":
     curated_tpl = cfg.get("paths_local", {}).get("curated") if args.local else None
     if args.local:
         if not raw_tpl or not curated_tpl:
-            raise SystemExit("paths_local.raw/curated no definido en config/ingest.yaml")
+            raise SystemExit(
+                "paths_local.raw/curated no definido en config/ingest.yaml"
+            )
         assert isinstance(raw_tpl, str) and isinstance(curated_tpl, str)
         raw_path = write_raw(
-            raw_df, raw_tpl, dataset=args.dataset, run_ts=now_utc(), bucket_root={"root": local_root}, io_mode="local"
+            raw_df,
+            raw_tpl,
+            dataset=args.dataset,
+            run_ts=now_utc(),
+            bucket_root={"root": local_root},
+            io_mode="local",
         )
     else:
         raw_path = write_raw(
@@ -331,7 +455,14 @@ if __name__ == "__main__":
             bucket_root={"bucket": cfg["paths"]["bucket"]},
         )
     raw_rows = len(raw_df)
-    _log("info", run_id, action="raw_written", dataset=args.dataset, rows=raw_rows, path=raw_path)
+    _log(
+        "info",
+        run_id,
+        action="raw_written",
+        dataset=args.dataset,
+        rows=raw_rows,
+        path=raw_path,
+    )
 
     kind = ds.get("normalize", {}).get("kind")
     curated_df = normalize_dataset(kind, dfs_by_id, ds)
@@ -359,24 +490,58 @@ if __name__ == "__main__":
             curated_df["zone"] = curated_df["geo_name"]
         # Elimina cualquier columna con nombre de indicador y asegura solo 'source'
         for col in curated_df.columns:
-            if col not in ["hour_ts", "price_eur_mwh", "zone", "source", "indicator_id"]:
+            if col not in [
+                "hour_ts",
+                "price_eur_mwh",
+                "zone",
+                "source",
+                "indicator_id",
+            ]:
                 if col.upper() in ["PVPC", "SPOT_ES"]:
                     curated_df.drop(columns=[col], inplace=True)
         # Asegura que indicator_id esté presente
         if "indicator_id" not in curated_df.columns:
-            curated_df["indicator_id"] = ds["indicator_ids"][0] if "indicator_ids" in ds else "unknown"
+            curated_df["indicator_id"] = (
+                ds["indicator_ids"][0] if "indicator_ids" in ds else "unknown"
+            )
     curated_df = dedupe(curated_df, ds.get("dedupe_key", []))
     curated_df = apply_validators(ds, curated_df)
 
     if args.local:
         assert isinstance(curated_tpl, str)
         curated_path = write_parquet_partitioned(
-            curated_df, curated_tpl, ds["curated_table"], target_day, {"root": local_root}, io_mode="local"
+            curated_df,
+            curated_tpl,
+            ds["curated_table"],
+            target_day,
+            {"root": local_root},
+            io_mode="local",
         )
     else:
         curated_path = write_parquet_partitioned(
-            curated_df, cfg["paths"]["curated"], ds["curated_table"], target_day, {"bucket": cfg["paths"]["bucket"]}
+            curated_df,
+            cfg["paths"]["curated"],
+            ds["curated_table"],
+            target_day,
+            {"bucket": cfg["paths"]["bucket"]},
         )
     cur_rows = len(curated_df)
-    _log("info", run_id, action="curated_written", dataset=args.dataset, rows=cur_rows, path=curated_path)
-    _log("info", run_id, action="run_summary", dataset=args.dataset, raw_rows=raw_rows, curated_rows=cur_rows, duration_seconds=round((datetime.now(timezone.utc)-t_global_start).total_seconds(),2))
+    _log(
+        "info",
+        run_id,
+        action="curated_written",
+        dataset=args.dataset,
+        rows=cur_rows,
+        path=curated_path,
+    )
+    _log(
+        "info",
+        run_id,
+        action="run_summary",
+        dataset=args.dataset,
+        raw_rows=raw_rows,
+        curated_rows=cur_rows,
+        duration_seconds=round(
+            (datetime.now(timezone.utc) - t_global_start).total_seconds(), 2
+        ),
+    )

@@ -15,15 +15,21 @@ def parse_values_to_df(payload: Dict[str, Any]) -> pd.DataFrame:
     return df
 
 
-def normalize_prices(df: pd.DataFrame, column_map: Dict[str, str], source: str) -> pd.DataFrame:
+def normalize_prices(
+    df: pd.DataFrame, column_map: Dict[str, str], source: str
+) -> pd.DataFrame:
     if df.empty:
         return df
     # Filtrar solo la zona 'Península' si el source es PVPC
     if source == "PVPC" and "geo_name" in df.columns:
         df = df[df["geo_name"] == "Península"].copy()
     out = pd.DataFrame()
-    out[column_map.get("ts", "hour_ts")] = df["datetime"].dt.tz_convert("Europe/Madrid").dt.floor("h")
-    out[column_map.get("value", "price_eur_mwh")] = pd.to_numeric(df["value"], errors="coerce")
+    out[column_map.get("ts", "hour_ts")] = (
+        df["datetime"].dt.tz_convert("Europe/Madrid").dt.floor("h")
+    )
+    out[column_map.get("value", "price_eur_mwh")] = pd.to_numeric(
+        df["value"], errors="coerce"
+    )
     zone_col = df.get("geo_name", "ES")
     # Renombrar Península a España para homogeneizar con SPOT_ES
     if isinstance(zone_col, pd.Series):
@@ -34,7 +40,9 @@ def normalize_prices(df: pd.DataFrame, column_map: Dict[str, str], source: str) 
 
 
 def normalize_wide_by_indicator(
-    dfs_by_id: Dict[int, pd.DataFrame], column_map: Dict[str, str], id_rename: Dict[str, str] | None = None
+    dfs_by_id: Dict[int, pd.DataFrame],
+    column_map: Dict[str, str],
+    id_rename: Dict[str, str] | None = None,
 ) -> pd.DataFrame:
     parts = []
     ts_col = column_map.get("ts", "hour_ts")
@@ -52,7 +60,10 @@ def normalize_wide_by_indicator(
         return pd.DataFrame()
     big = pd.concat(parts, ignore_index=True)
     pivot = big.pivot_table(
-        index=[ts_col, "geo_name"], columns="indicator_id", values="value", aggfunc="last"
+        index=[ts_col, "geo_name"],
+        columns="indicator_id",
+        values="value",
+        aggfunc="last",
     ).reset_index()
     rename = {"geo_name": column_map.get("zone", "zone")}
     out = pivot.rename(columns=rename)
@@ -79,7 +90,9 @@ def normalize_wide_by_indicator(
 
 
 def normalize_long_tech(
-    dfs_by_id: Dict[int, pd.DataFrame], tech_map: Dict[str, str], column_map: Dict[str, str]
+    dfs_by_id: Dict[int, pd.DataFrame],
+    tech_map: Dict[str, str],
+    column_map: Dict[str, str],
 ) -> pd.DataFrame:
     rows = []
     ts_col = column_map.get("ts", "hour_ts")
@@ -92,7 +105,9 @@ def normalize_long_tech(
             {
                 ts_col: local_ts.dt.floor("h") if ts_col == "hour_ts" else local_ts,
                 column_map.get("tech", "tech"): tech,
-                column_map.get("value", "mw"): pd.to_numeric(df["value"], errors="coerce"),
+                column_map.get("value", "mw"): pd.to_numeric(
+                    df["value"], errors="coerce"
+                ),
                 column_map.get("zone", "zone"): df.get("geo_name", "ES"),
             }
         )
@@ -103,7 +118,9 @@ def normalize_long_tech(
 
 
 def normalize_interconn_pairs(
-    dfs_by_id: Dict[int, pd.DataFrame], to_pairs: Dict[str, list], column_map: Dict[str, str]
+    dfs_by_id: Dict[int, pd.DataFrame],
+    to_pairs: Dict[str, list],
+    column_map: Dict[str, str],
 ) -> pd.DataFrame:
     rows = []
     ts_col = column_map.get("ts", "hour_ts")
@@ -124,5 +141,7 @@ def normalize_interconn_pairs(
         return pd.DataFrame()
     out = pd.concat(rows, ignore_index=True)
     group_cols = [c for c in out.columns if c not in ("export_mw", "import_mw")]
-    out = out.groupby(group_cols, as_index=False).agg({c: "last" for c in out.columns if c not in group_cols})
+    out = out.groupby(group_cols, as_index=False).agg(
+        {c: "last" for c in out.columns if c not in group_cols}
+    )
     return out
