@@ -14,9 +14,9 @@ env:
   IMAGE_NAME: tfm-energy-ingest
   ARTIFACT_HOST: europe-southwest1-docker.pkg.dev
   INGEST_DATASETS: prices_pvpc prices_spot demand gen_mix interconn
-  INGEST_SA: ingest-base
-  COMPACT_SA: ingest-compact
-  QC_SA: ingest-qc
+  INGEST_SA: ingest-jobs-sa
+  COMPACT_SA: compact-jobs-sa
+  QC_SA: qc-jobs-sa
   SECRET_ESIOS: ESIOS_TOKEN
 
 jobs:
