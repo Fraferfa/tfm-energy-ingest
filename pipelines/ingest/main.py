@@ -33,8 +33,8 @@ except (
     from pipelines.ingest.normalize import (  # type: ignore
         normalize_interconn_pairs, normalize_long_tech, normalize_prices,
         normalize_wide_by_indicator, parse_values_to_df)
-    from pipelines.ingest.utils import (dedupe, now_utc,  # type: ignore
-                                        resolve_window,
+    from pipelines.ingest.utils import now_utc  # type: ignore
+    from pipelines.ingest.utils import (dedupe, resolve_window,
                                         write_parquet_partitioned, write_raw)
 
 HOOKS = {
