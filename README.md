@@ -562,3 +562,9 @@ Componentes principales:
 5. Concatena y trimea columnas RAW → escribe CSV (raw partition) si no está vacío
 6. Normaliza según `kind` (long_tech), aplica hook `compute_mix_pct` y validadores
 7. Filtra a la hora objetivo (manejo DST) → dedup por `(minute_ts, zone, tech)
+
+---
+
+## Documentación adicional
+
+- **[Guía completa de API PVPC](pvpc_api_guide.md)**: Solución de problemas comunes, mejores prácticas y validaciones para obtener datos completos de ESIOS
